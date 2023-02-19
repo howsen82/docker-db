@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  rd-master:
+    image: redis:7
+  rd-slave:
+    image: redis:7
+    command: redis-server --slaveof rd-master 6379
+
+# docker-compose up -d
+#
+# Slave
+# docker-compose exec rd-slave redis-cli
+# > SUBSCRIBE myChannel
+#
+# Master
+# docker-compose exec rd-master redis-cli
+# > PUBLISH myChannel

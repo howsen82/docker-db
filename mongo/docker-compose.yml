@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  db:
+    image: mongo:4.4.19-rc2
+    volumes:
+      - mongo:/data/db
+      - ./init:/docker-entrypoint-initdb.d
+      - ./queries:/queries
+    environment:
+      - MONGO_INITDB_DATABASE=geonames
+
+volumes:
+  mongo:
+
+# docker-compose up -d
+# docker-compose exec db mongo geonames /queries/koeln.js

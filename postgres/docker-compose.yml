@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:latest
+    environment:
+      - POSTGRES_PASSWORD=secret
+      - POSTGRES_DB=geonames
+    volumes:
+      - ./init:/docker-entrypoint-initdb.d
+      - pgdata:/var/lib/postgresql/data
+
+  pgadmin:
+    image: dpage/pgadmin4
+    ports:
+      - 5050:80
+    volumes:
+      - pgadmindata:/var/lib/pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=info@dockerbuch.info
+      - PGADMIN_DEFAULT_PASSWORD=secret
+      - PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION=True
+      - PGADMIN_CONFIG_LOGIN_BANNER="Authorised users only!"
+
+volumes:
+  pgdata:
+  pgadmindata:
+
+# For environment variables, please refer to https://www.pgadmin.org/docs/pgadmin4/latest/container_deployment.html
+# For pgAdmin, register new server using
+# Host: db
+# Username: postgres
+# Password: secret
+
+# Backup
+# docker exec postgres_db_1 pg_dump --username=postgres geonames > geonames_backup.sql
+#
+# docker-compose -f docker-compose.yml -f docker-compose.backup.yml run --rm backup -d

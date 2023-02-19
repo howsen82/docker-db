@@ -1,0 +1,136 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:latest
+    restart: always
+    depends_on:
+      - traefik
+    ports:
+      - 5432:6432
+    networks:
+      - traefik-public
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=secret
+      - POSTGRES_DB=geonames
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U postgres --dbname=geonames
+      interval: 10s
+      timeout: 10s
+      retries: 50
+      start_period: 30s
+    volumes:
+      - ./init:/docker-entrypoint-initdb.d
+      - pgdata:/var/lib/postgresql/data
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints: [node.role == manager]
+      labels:
+        - traefik.enable=false
+
+  pgadmin:
+    image: dpage/pgadmin4
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - 5050:80
+    networks:
+      - traefik-public
+    volumes:
+      - pgadmindata:/var/lib/pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=info@dockerbuch.info
+      - PGADMIN_DEFAULT_PASSWORD=secret
+      - PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION=True
+      - PGADMIN_CONFIG_LOGIN_BANNER="Authorised users only!"
+      - SCRIPT_NAME=/_admin/pgadmin
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.pgadmin4-http.entrypoints=web"
+        - "traefik.http.routers.pgadmin4-http.rule=Host(`localhost`)"
+        - "traefik.http.routers.pgadmin4.entrypoints=websecure"
+        - "traefik.http.routers.pgadmin4.rule=Host(`localhost` && PathPrefix(`/_admin/pgadmin`))"
+        - "traefik.http.routers.pgadmin4-http.middlewares=pgadmin4-https@docker"
+        - "traefik.http.middlewares.pgadmin4-https.redirectscheme.scheme=https"
+        - "traefik.http.routers.pgadmin4.tls=true"
+        - "traefik.http.routers.pgadmin4.tls.certresolver=le"
+        - "traefik.http.services.pgadmin4.loadbalancer.server.port=80"
+  
+  traefik:
+    image: traefik:3.0
+    command:
+      - "--providers.docker.swarmMode=false" # true if docker swarm enable
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--api.insecure=false"
+      - "--entryPoints.web.address=:1337"
+      - "— entryPoints.websecure.address=:8080"
+      - "--certificatesResolvers.le.acme.httpchallenge=true"
+      - "--certificatesResolvers.le.acme.email=info@dockerbuch.info"
+      - "--certificatesResolvers.le.acme.storage=/letsencrypt/acme.json"
+      - "— certificatesResolvers.le.acme.httpChallenge.entryPoint=web"
+    ports:
+      - 1337:1337
+      - 9090:8080
+    networks:
+      - traefik-public
+    volumes:
+      - traefik-certificates:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  agent:
+    image: portainer/agent
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/docker/volumes:/var/lib/docker/volumes
+    networks:
+      - traefik-public
+    deploy:
+      mode: global
+      placement:
+        constraints: [node.platform.os == linux]
+
+  portainer:
+    image: portainer/portainer
+    command: -H tcp://tasks.agent:9001 — tlsskipverify
+    volumes:
+      - portainerdata:/data
+    networks:
+      - traefik-public
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.portainer.rule=Host(`portainer.aymconsultores.es`)"
+        - "traefik.http.routers.portainer.entrypoints=websecure"
+        - "traefik.http.routers.portainer.tls.certresolver=le"
+        - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+
+networks:
+  traefik-public:
+    external: true
+
+volumes:
+  pgdata:
+  pgadmindata:
+  portainerdata:
+  traefik-certificates:
+
+# docker-compose -f docker-compose.yml -f docker-compose.backup.yml run backup -d
+# docker-compose -f docker-compose.yml -f docker-compose.backup.yml up -d
+#
+# docker-compose -f docker-compose.yml -f docker-compose.backup.yml down -v
